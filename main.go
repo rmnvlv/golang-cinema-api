@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/rmnvlv/testGolangCinema/internal/config"
+	"github.com/rmnvlv/testGolangCinema/internal/storage/sqlite"
 )
 
 const (
@@ -23,10 +24,18 @@ func main() {
 	log := initLogger(cfg.Env)
 	log.Info("Loger init completed", slog.String("env", cfg.Env))
 
-	//TODO: init storage: psql
+	//init storage: sqlite
+	storage, err := sqlite.New(cfg.StoragePath)
+	if err != nil {
+		log.Error("failed with init storage", err)
+		os.Exit(1)
+	}
+
+	_ = storage
+
+	//TODO: init router
 
 	//TODO: run server
-
 }
 
 func initLogger(env string) *slog.Logger {
