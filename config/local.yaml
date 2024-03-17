@@ -1,0 +1,5 @@
+env: "local"
+storage_path: "local"
+http_server:
+  timeout: 10s
+  idle_timeout: 120s
