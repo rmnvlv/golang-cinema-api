@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/mattn/go-sqlite3"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/rmnvlv/testGolangCinema/internal/storage"
+	"github.com/rmnvlv/golang-cinema-api/internal/models"
+	_ "github.com/rmnvlv/golang-cinema-api/internal/models"
+	"github.com/rmnvlv/golang-cinema-api/internal/storage"
 )
 
 type Storage struct {
@@ -33,10 +34,10 @@ func New(storagePath string) (*Storage, error) {
 	query, err := db.Prepare(`
 	CREATE TABLE IF NOT EXISTS movies(
 		id INTEGER NOT NULL PRIMARY KEY,
-		name TEXT NOT NULL UNIQUE,
+		title TEXT NOT NULL UNIQUE,
 		description TEXT NOT NULL,
 		date TEXT NOT NULL,
-		rate INTEGER NOT NULL);
+		rating INTEGER NOT NULL);
 		`)
 
 	if err != nil {
@@ -67,8 +68,8 @@ func New(storagePath string) (*Storage, error) {
 
 	query, err = db.Prepare(`
 	CREATE TABLE IF NOT EXISTS rules(
-		movieId INTEGER NOT NULL,
-		actorId INTEGER);
+		movie_id INTEGER NOT NULL,
+		actor_id INTEGER);
 	`)
 
 	if err != nil {
@@ -82,21 +83,6 @@ func New(storagePath string) (*Storage, error) {
 
 	return &Storage{db: db}, nil
 }
-
-/*
-	Получение списка фильмов с сортировкой -- выбор сортировки на уровне хэндлера -- сортировка здесь
-		-- подтягивать актеров по смежной таблице
-	Поиск фильма по фрагменту названия, по фрагменту имени актера -- выдача списка фильмов, селект
-		зависит от того что ввели на поиске -- ТЕ можно бахнуть свичкейс с тэгом а дальше селектить
-
-	Получение списка актеров -- подтягивать фильмы по смежной таблице
-
-	Создание правила фильм-актер: Роут создания фильмов, туда передается список актеров (какой список? Имен? Вся структура?)
-		Сначала создается филь возращается id
-		Создаются актеры или подтягиваются уже имеющиеся и берется id
-		Каждому актеру назначается фильм в сооответсвии с id
-
-*/
 
 // Actor
 func (s *Storage) CreateActor(name string, gender string, birth time.Time) (int64, error) {
@@ -172,68 +158,9 @@ func (s *Storage) DeleteActor(actorId int64) error {
 	return nil
 }
 
-func (s *Storage) GetActors() ([]Actor, error) {
-	// query := "SELECT * FROM actors"
-	// rows, err := s.db.Query(query)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.Query", err)
-	// }
-	// defer rows.Close()
-
-	// var actors []Actor
-	// for rows.Next() {
-	// 	var actor Actor
-	// 	bithString := ""
-	// 	err := rows.Scan(&actor.id, &actor.name, &actor.gender, &bithString)
-
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.RowsScan", err)
-	// 	}
-
-	// 	if bithString != "" {
-	// 		date, err := time.Parse("2006-01-02", bithString[:10])
-
-	// 		if err != nil {
-	// 			return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.DateConvert", err)
-	// 		}
-	// 		actor.birth = date
-	// 	}
-	// 	actors = append(actors, actor)
-	// }
-
-	// for _, v := range actors {
-	// 	query, err := s.db.Prepare(`
-	// 	SELECT m.name, m.id
-	// 	FROM movies m
-	// 	JOIN rules r ON m.id = r.movieId
-	// 	JOIN actors a ON r.actorId = a.id
-	// 	WHERE a.id = ?`)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.SelectMoviePrepare", err)
-	// 	}
-
-	// 	rows, err := query.Query(v.id)
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.SelectMovieQuery", err)
-	// 	}
-	// 	defer rows.Close()
-	// 	fmt.Println(rows)
-
-	// 	var movie Movie
-	// 	for rows.Next() {
-	// 		err = rows.Scan(&movie.name, &movie.id)
-	// 		if err != nil {
-	// 			return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.RowsScan", err)
-	// 		}
-	// 	}
-
-	// 	v.movies = append(v.movies, movie.name)
-	// }
-
-	// return actors, nil
-
+func (s *Storage) GetActors() ([]models.Actor, error) {
 	query := `
-	SELECT a.id, a.name, m.id, m.name
+	SELECT a.id, a.name, m.id, m.title
 	FROM actors a
 	JOIN rules r ON a.id = r.actorId
 	JOIN movies m ON r.movieId = m.id
@@ -245,36 +172,36 @@ func (s *Storage) GetActors() ([]Actor, error) {
 	}
 	defer rows.Close()
 
-	actorsMap := make(map[int64]*Actor)
+	actorsMap := make(map[int64]*models.Actor)
 	for rows.Next() {
 		var actorId int64
 		var actorName string
 		var movieId int64
-		var movieName string
+		var movieTitle string
 
-		err := rows.Scan(&actorId, &actorName, &movieId, &movieName)
+		err := rows.Scan(&actorId, &actorName, &movieId, &movieTitle)
 		if err != nil {
 			return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.Scan", err)
 		}
 
 		actor, ok := actorsMap[actorId]
 		if !ok {
-			actor = &Actor{
-				id:     actorId,
-				name:   actorName,
-				movies: []string{},
+			actor = &models.Actor{
+				Id:     actorId,
+				Name:   actorName,
+				Movies: []string{},
 			}
 			actorsMap[actorId] = actor
 		}
 
-		actor.movies = append(actor.movies, fmt.Sprint(Movie{id: movieId, name: movieName}))
+		actor.Movies = append(actor.Movies, fmt.Sprint(models.Movie{Id: movieId, Title: movieTitle}))
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetActors.rowsErr", err)
 	}
 
-	actors := make([]Actor, 0, len(actorsMap))
+	actors := make([]models.Actor, 0, len(actorsMap))
 	for _, actor := range actorsMap {
 		actors = append(actors, *actor)
 	}
@@ -284,15 +211,15 @@ func (s *Storage) GetActors() ([]Actor, error) {
 
 //Movie
 
-func (s *Storage) CreateMovie(name string, description string, date time.Time, rate int8) (int64, error) {
+func (s *Storage) CreateMovie(title string, description string, date time.Time, rating int8) (int64, error) {
 
-	query, err := s.db.Prepare("INSERT INTO movies(name, description, date, rate) VALUES(?, ?, ?, ?)")
+	query, err := s.db.Prepare("INSERT INTO movies(title, description, date, rating) VALUES(?, ?, ?, ?)")
 
 	if err != nil {
 		return 0, fmt.Errorf("%s, %w", "storage.sqlite.CreateMovie.Prepare", err)
 	}
 
-	result, err := query.Exec(name, description, date, rate)
+	result, err := query.Exec(title, description, date, rating)
 	if err != nil {
 		if sqliteErr, ok := err.(sqlite3.Error); ok && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
 			return 0, fmt.Errorf("%s, %w", "storage.sqlite.CreateMovie.Exec", storage.ErrFilmExists)
@@ -358,16 +285,33 @@ func (s *Storage) DeliteMovie(filmId int) error {
 	return nil
 }
 
-func (s *Storage) GetMoviesSorted(sortBy string) ([]Movie, error) {
+func (s *Storage) GetMoviesSorted(sortBy string) ([]models.Movie, error) {
 	var query string
-
 	switch sortBy {
-	case "name":
-		query = "SELECT * FROM movies ORDER BY name ASC"
+	case "title":
+		query = `
+            SELECT m.id, m.title, m.rating, m.description, m.date, m.rating,  a.id, a.name, a.gender
+            FROM movies m
+            LEFT JOIN rules r ON m.id = r.movieId
+            LEFT JOIN actors a ON r.actorId = a.id
+            ORDER BY m.title ASC
+        `
 	case "date":
-		query = "SELECT * FROM movies ORDER BY date ASC"
+		query = `
+            SELECT m.id, m.title, m.rating, m.description, m.date, m.rating,  a.id, a.name, a.gender
+            FROM movies m
+            LEFT JOIN rules r ON m.id = r.movieId
+            LEFT JOIN actors a ON r.actorId = a.id
+            ORDER BY m.date ASC
+        `
 	default:
-		query = "SELECT * FROM movies ORDER BY rate DESC"
+		query = `
+            SELECT m.id, m.title, m.description, m.date, m.rating,  a.id, a.name, a.gender
+            FROM movies m
+            LEFT JOIN rules r ON m.id = r.movieId
+            LEFT JOIN actors a ON r.actorId = a.id
+            ORDER BY m.rating DESC
+        `
 	}
 
 	rows, err := s.db.Query(query)
@@ -376,49 +320,76 @@ func (s *Storage) GetMoviesSorted(sortBy string) ([]Movie, error) {
 	}
 	defer rows.Close()
 
-	var movies []Movie
+	var moviesMap = make(map[int64]*models.Movie)
 	for rows.Next() {
-		var movie Movie
-		timeString := ""
-		err := rows.Scan(&movie.id, &movie.name, &movie.description, &timeString, &movie.rate)
+		var movieID int64
+		var movieTitle string
+		var movieDescription string
+		var movieDateString string
+		var movieRating int
+		var actorID sql.NullInt64
+		var actorName sql.NullString
+		var actorGender string
+
+		err := rows.Scan(&movieID, &movieTitle, &movieDescription,
+			&movieDateString, &movieRating, &actorID, &actorName, &actorGender)
 		if err != nil {
-			return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetMovies.RowsScan", err)
+			return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetMovies.Scan", err)
 		}
-		date, err := time.Parse("2006-01-02", timeString[:10])
+
+		movieDate, err := time.Parse("2006-01-02", movieDateString[:10])
 		if err != nil {
 			return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetMovies.DateConvert", err)
 		}
-		movie.date = date
-		movies = append(movies, movie)
+
+		movie, ok := moviesMap[movieID]
+		if !ok {
+			movie = &models.Movie{
+				Id:          movieID,
+				Title:       movieTitle,
+				Description: movieDescription,
+				Date:        movieDate,
+				Rating:      movieRating,
+				Actors:      make([]models.Actor, 0),
+			}
+			moviesMap[movieID] = movie
+		}
+
+		if actorID.Valid && actorName.Valid {
+			movie.Actors = append(movie.Actors, models.Actor{Id: actorID.Int64, Name: actorName.String})
+		}
 	}
 
-	//TODO: Добавить актеров через смежную таблицу +
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetMovies.RowsError", err)
+		return nil, fmt.Errorf("%s, %w", "storage.sqlite.GetMovies.RowsErr", err)
+	}
+
+	var movies = make([]models.Movie, 0, len(moviesMap))
+	for _, movie := range moviesMap {
+		movies = append(movies, *movie)
 	}
 
 	return movies, nil
 }
 
-func (s *Storage) GetMovieByFragment(fragmentType string, fragment map[string]interface{}) ([]Movie, error) {
+func (s *Storage) GetMovieByFragment(fragmentType string, fragment string) ([]models.Movie, error) {
 	switch fragmentType {
-	case "name":
-		movies, err := s.searchMoviesByName(fmt.Sprint(fragment["name"]))
+	case "title":
+		movies, err := s.searchMoviesByTitle(fmt.Sprint(fragment))
 		return movies, err
 	case "actor":
-		movies, err := s.searchMoviesByActor(fmt.Sprint(fragment["actor"]))
+		movies, err := s.searchMoviesByActor(fmt.Sprint(fragment))
 		return movies, err
 	}
 
 	return nil, fmt.Errorf("%s", "storage.sqlite.searchMoviesByFragment.NotEnoughtFragments")
 }
 
-func (s *Storage) searchMoviesByName(fragment string) ([]Movie, error) {
+func (s *Storage) searchMoviesByTitle(fragment string) ([]models.Movie, error) {
 	query := `
         SELECT *
         FROM movies m
-        WHERE m.name LIKE ?
+        WHERE m.title LIKE ?
     `
 	rows, err := s.db.Query(query, "%"+fragment+"%")
 	if err != nil {
@@ -426,32 +397,32 @@ func (s *Storage) searchMoviesByName(fragment string) ([]Movie, error) {
 	}
 	defer rows.Close()
 
-	var movies []Movie
+	var movies []models.Movie
 	for rows.Next() {
-		var movie Movie
+		var movie models.Movie
 		timeString := ""
-		err := rows.Scan(&movie.id, &movie.name, &movie.description, &timeString, &movie.rate)
+		err := rows.Scan(&movie.Id, &movie.Title, &movie.Description, &timeString, &movie.Rating)
 		if err != nil {
-			return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByName.RowsScan", err)
+			return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByTitle.RowsScan", err)
 		}
 		date, err := time.Parse("2006-01-02", timeString[:10])
 		if err != nil {
-			return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByName.DateConvert", err)
+			return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByTitle.DateConvert", err)
 		}
-		movie.date = date
+		movie.Date = date
 		movies = append(movies, movie)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByName.RowsError", err)
+		return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByTitle.RowsError", err)
 	}
 
 	return movies, nil
 }
 
-func (s *Storage) searchMoviesByActor(fragment string) ([]Movie, error) {
+func (s *Storage) searchMoviesByActor(fragment string) ([]models.Movie, error) {
 	query := `
-        SELECT *
+        SELECT m.id, m.title, m.description, m.date, m.rating
         FROM movies m
         JOIN rules r ON m.id = r.movieId
         JOIN actors a ON a.id = r.actorId
@@ -463,11 +434,11 @@ func (s *Storage) searchMoviesByActor(fragment string) ([]Movie, error) {
 	}
 	defer rows.Close()
 
-	var movies []Movie
+	var movies []models.Movie
 	for rows.Next() {
-		var movie Movie
+		var movie models.Movie
 		timeString := ""
-		err := rows.Scan(&movie.id, &movie.name, &movie.description, &timeString, &movie.rate)
+		err := rows.Scan(&movie.Id, &movie.Title, &movie.Description, &timeString, &movie.Rating)
 		if err != nil {
 			return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByActor.RowsScan", err)
 		}
@@ -475,7 +446,7 @@ func (s *Storage) searchMoviesByActor(fragment string) ([]Movie, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s, %w", "storage.sqlite.searchMoviesByActor.DateConvert", err)
 		}
-		movie.date = date
+		movie.Date = date
 		movies = append(movies, movie)
 	}
 
@@ -503,28 +474,11 @@ func (s *Storage) CreateRule(novieId int, actorIds []int) error {
 	}()
 
 	for _, acactorId := range actorIds {
-		_, err = tx.Exec("INSERT INTO rules (movieId, actorId) VALUES(?, ?)", novieId, acactorId)
+		_, err = tx.Exec("INSERT INTO rules (movie_id, actor_id) VALUES(?, ?)", novieId, acactorId)
 		if err != nil {
 			return fmt.Errorf("%s, %w", "storage.sqlite.CreateRule.txFor", err)
 		}
 	}
 
 	return nil
-}
-
-type Movie struct {
-	id          int64
-	name        string
-	description string
-	date        time.Time
-	rate        int
-	actors      []Actor
-}
-
-type Actor struct {
-	id     int64
-	name   string
-	gender string
-	birth  time.Time
-	movies []string
 }
